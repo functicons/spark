@@ -35,7 +35,16 @@ object SQLDataSourceExample {
     runBasicParquetExample(spark)
     runParquetSchemaMergingExample(spark)
     runJsonDatasetExample(spark)
-    runJdbcDatasetExample(spark)
+
+    // Avro requires --packages org.apache.spark:spark-avro_<scala-version>:<version> in Spark 2.4,
+    // see https://spark.apache.org/docs/latest/sql-data-sources-avro.html.
+    if (!args.contains("--skip-avro")) {
+      runBasicAvroExample(spark)
+    }
+
+    if (!args.contains("--skip-jdbc")) {
+      runJdbcDatasetExample(spark);
+    }
 
     spark.stop()
   }
@@ -109,6 +118,34 @@ object SQLDataSourceExample {
     // |Name: Justin|
     // +------------+
     // $example off:basic_parquet_example$
+  }
+
+  private def runBasicAvroExample(spark: SparkSession): Unit = {
+    // $example on:basic_avro_example$
+    // Encoders for most common types are automatically provided by importing spark.implicits._
+    import spark.implicits._
+
+    // DataFrames can be read from Avro files.
+    val usersDF = spark.read.format("avro").load("examples/src/main/resources/users.avro")
+
+    // DataFrames can be saved as Avro files.
+    usersDF.select("name", "favorite_color").write.format("avro").save("namesAndFavColors.avro")
+
+    // Read in the Avro file created above
+    // Avro files are self-describing so the schema is preserved
+    // The result of loading an Avro file is also a DataFrame
+    val avroFileDF = spark.read.format("avro").load("namesAndFavColors.avro")
+
+    // Avro files can also be used to create a temporary view and then used in SQL statements
+    avroFileDF.createOrReplaceTempView("avroFile")
+    val namesDF = spark.sql("SELECT name, favorite_color FROM avroFile WHERE favorite_color='red'")
+    namesDF.map(attributes => "Name: " + attributes(0)).show()
+    // +------------+
+    // |       value|
+    // +------------+
+    // |Name: Ben   |
+    // +------------+
+    // $example off:basic_avro_example$
   }
 
   private def runParquetSchemaMergingExample(spark: SparkSession): Unit = {
